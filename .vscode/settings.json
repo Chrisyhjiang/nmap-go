@@ -63,6 +63,10 @@
         "compare": "cpp",
         "concepts": "cpp",
         "algorithm": "cpp",
-        "iomanip": "cpp"
+        "iomanip": "cpp",
+        "__tree": "cpp",
+        "set": "cpp",
+        "numeric": "cpp",
+        "random": "cpp"
     }
 }

@@ -1,10 +1,10 @@
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Iinclude
-LDFLAGS = -lpthread
+CXXFLAGS = -std=c++11 -Wall -Iinclude -I/opt/homebrew/Cellar/libtins/4.5/include
+LDFLAGS = -lpthread -L/opt/homebrew/Cellar/libtins/4.5/lib -ltins
 
 TARGET = bin/my_nmap
-SRCS = src/main.cpp src/scanner.cpp src/output.cpp
-HEADERS = include/scanner.h include/output.h
+SRCS = src/main.cpp src/scanner.cpp src/output.cpp src/syn_scanner.cpp
+HEADERS = include/scanner.h include/output.h include/syn_scanner.h
 
 OBJS = $(patsubst src/%.cpp, bin/%.o, $(SRCS))
 

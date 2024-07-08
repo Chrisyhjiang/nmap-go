@@ -7,6 +7,17 @@
 #include <mutex>
 #include <iostream>
 #include <netinet/in.h>
+#include <ifaddrs.h>
+#include <netdb.h>
+#include <fcntl.h>
+#include <chrono>
+#include <vector>
+#include <algorithm>
+#include <random>
+#include <atomic>
+#include <unordered_map>
+
+using namespace std;
 
 // Manual definitions of required structures
 struct iphdr {
@@ -42,7 +53,15 @@ struct tcphdr {
     uint16_t urg_ptr;
 };
 
-Scanner::Scanner(const std::string& target) : target_(target) {}
+Scanner::Scanner(const std::string& target) : target_(target), gen(rd()), dis(1024, 65535) {
+    initialize_socket();
+}
+
+Scanner::~Scanner() {
+    if (raw_socket_ >= 0) {
+        close(raw_socket_);
+    }
+}
 
 std::vector<int> Scanner::scan(int start_port, int end_port) {
     std::vector<int> open_ports;
@@ -90,44 +109,82 @@ bool Scanner::is_port_open(int port) {
     return result == 0;
 }
 
-bool Scanner::is_port_open_syn(int port) {
-    int sock = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
-    if (sock < 0) {
-        perror("Failed to create socket");
-        return false;
+std::string Scanner::get_local_ip() {
+    struct ifaddrs *ifaddr, *ifa;
+    char host[NI_MAXHOST];
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        exit(EXIT_FAILURE);
     }
 
-    char packet[4096];
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        if (ifa->ifa_addr->sa_family == AF_INET) {
+            int s = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
+                                host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+            if (s != 0) {
+                printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                exit(EXIT_FAILURE);
+            }
+
+            // Skip loopback interface
+            if (strcmp(ifa->ifa_name, "lo") != 0) {
+                freeifaddrs(ifaddr);
+                return std::string(host);
+            }
+        }
+    }
+
+    freeifaddrs(ifaddr);
+    return "";
+}
+
+void Scanner::initialize_socket() {
+    raw_socket_ = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
+    if (raw_socket_ < 0) {
+        throw std::runtime_error("Failed to create raw socket");
+    }
+    int one = 1;
+    if (setsockopt(raw_socket_, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one)) < 0) {
+        throw std::runtime_error("Failed to set IP_HDRINCL");
+    }
+    // Set socket to non-blocking mode
+    int flags = fcntl(raw_socket_, F_GETFL, 0);
+    fcntl(raw_socket_, F_SETFL, flags | O_NONBLOCK);
+}
+
+void Scanner::send_syn_packet(int port) {
+    char packet[sizeof(struct iphdr) + sizeof(struct tcphdr)];
     struct iphdr *iph = (struct iphdr *)packet;
     struct tcphdr *tcph = (struct tcphdr *)(packet + sizeof(struct iphdr));
     struct sockaddr_in sin;
 
     sin.sin_family = AF_INET;
     sin.sin_port = htons(port);
-    sin.sin_addr.s_addr = inet_addr(target_.c_str());
+    inet_pton(AF_INET, target_.c_str(), &sin.sin_addr);
 
-    memset(packet, 0, 4096);
+    memset(packet, 0, sizeof(packet));
 
     // IP Header
     iph->ihl = 5;
     iph->version = 4;
     iph->tos = 0;
-    iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr));
-    iph->id = htons(54321);
+    iph->tot_len = sizeof(struct iphdr) + sizeof(struct tcphdr);
+    iph->id = htons(dis(gen));
     iph->frag_off = 0;
-    iph->ttl = 255;
+    iph->ttl = 64;
     iph->protocol = IPPROTO_TCP;
     iph->check = 0;
-    iph->saddr = INADDR_ANY;
-    iph->daddr = sin.sin_addr .s_addr;
-
-    // IP checksum
-    iph->check = checksum((unsigned short *)packet, sizeof(struct iphdr));
+    iph->saddr = inet_addr(get_local_ip().c_str());
+    iph->daddr = sin.sin_addr.s_addr;
 
     // TCP Header
-    tcph->source = htons(1234);  // Source port
+    tcph->source = htons(dis(gen));
     tcph->dest = htons(port);
-    tcph->seq = 0;
+    tcph->seq = htonl(dis(gen));
     tcph->ack_seq = 0;
     tcph->doff = 5;
     tcph->fin = 0;
@@ -136,49 +193,50 @@ bool Scanner::is_port_open_syn(int port) {
     tcph->psh = 0;
     tcph->ack = 0;
     tcph->urg = 0;
-    tcph->window = htons(5840);
+    tcph->window = htons(64240);
     tcph->check = 0;
     tcph->urg_ptr = 0;
 
-    // TCP checksum calculation
+    // Calculate checksums
+    iph->check = checksum((unsigned short *)packet, iph->tot_len);
     tcph->check = tcp_checksum(iph, tcph);
 
-    int one = 1;
-    const int *val = &one;
-    if (setsockopt(sock, IPPROTO_IP, IP_HDRINCL, val, sizeof(one)) < 0) {
-        perror("Error setting IP_HDRINCL");
-        close(sock);
-        return false;
-    }
-
-    // Debugging: print packet size and destination
-    std::cout << "Sending packet to " << target_ << " on port " << port << " with size " << ntohs(iph->tot_len) << std::endl;
-
-    if (sendto(sock, packet, ntohs(iph->tot_len), 0, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
-        perror("sendto failed");
-        close(sock);
-        return false;
-    }
-
-    struct sockaddr_in source_addr;
-    int saddr_size = sizeof(source_addr);
-    char buffer[4096];
-    int data_size = recvfrom(sock, buffer, 4096, 0, (struct sockaddr *)&source_addr, (socklen_t*)&saddr_size);
-
-    if (data_size < 0) {
-        perror("recvfrom failed");
-        close(sock);
-        return false;
-    }
-
-    struct iphdr *iph_reply = (struct iphdr *)buffer;
-    struct tcphdr *tcph_reply = (struct tcphdr *)(buffer + iph_reply->ihl * 4);
-
-    close(sock);
-
-    return (tcph_reply->syn == 1 && tcph_reply->ack == 1);
+    sendto(raw_socket_, packet, iph->tot_len, 0, (struct sockaddr *)&sin, sizeof(sin));
 }
 
+std::vector<int> Scanner::receive_syn_ack(const std::vector<int>& ports, int timeout_ms) {
+    std::vector<int> open_ports;
+    char buffer[4096];
+    struct sockaddr_in source_addr;
+    int saddr_size = sizeof(source_addr);
+    fd_set readfds;
+    struct timeval tv;
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+
+    while (std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now() - start).count() < timeout_ms) {
+        FD_ZERO(&readfds);
+        FD_SET(raw_socket_, &readfds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 10000; // 10ms
+
+        int result = select(raw_socket_ + 1, &readfds, NULL, NULL, &tv);
+        if (result > 0) {
+            int data_size = recvfrom(raw_socket_, buffer, 4096, 0, (struct sockaddr *)&source_addr, (socklen_t*)&saddr_size);
+            if (data_size > 0) {
+                struct iphdr *iph_reply = (struct iphdr *)buffer;
+                struct tcphdr *tcph_reply = (struct tcphdr *)(buffer + iph_reply->ihl * 4);
+                if (tcph_reply->syn == 1 && tcph_reply->ack == 1) {
+                    int port = ntohs(tcph_reply->source);
+                    if (std::find(ports.begin(), ports.end(), port) != ports.end()) {
+                        open_ports.push_back(port);
+                    }
+                }
+            }
+        }
+    }
+    return open_ports;
+}
 
 unsigned short Scanner::checksum(unsigned short *ptr, int nbytes) {
     long sum = 0;
@@ -231,29 +289,75 @@ unsigned short Scanner::tcp_checksum(struct iphdr *iph, struct tcphdr *tcph) {
 
 std::vector<int> Scanner::syn_scan(int start_port, int end_port) {
     std::vector<int> open_ports;
-    std::mutex mutex;
-
-    auto scan_range = [&](int start, int end) {
-        for (int port = start; port <= end; ++port) {
-            if (is_port_open_syn(port)) {
-                std::lock_guard<std::mutex> lock(mutex);
-                open_ports.push_back(port);
-            }
-        }
-    };
-
-    const int num_threads = 4;
-    std::vector<std::thread> threads;
-    int ports_per_thread = (end_port - start_port + 1) / num_threads;
-
-    for (int i = 0; i < num_threads; ++i) {
-        int thread_start = start_port + i * ports_per_thread;
-        int thread_end = (i == num_threads - 1) ? end_port : thread_start + ports_per_thread - 1;
-        threads.emplace_back(scan_range, thread_start, thread_end);
+    std::vector<int> ports_to_scan;
+    for (int port = start_port; port <= end_port; ++port) {
+        ports_to_scan.push_back(port);
     }
 
-    for (auto& thread : threads) {
-        thread.join();
+    const int BATCH_SIZE = 1000;
+    const int MAX_RETRIES = 3;
+    const int INITIAL_TIMEOUT_MS = 100;
+
+    std::mutex mutex;
+    std::atomic<int> active_threads(0);
+    const int MAX_THREADS = std::thread::hardware_concurrency();
+
+    auto scan_batch = [&](const std::vector<int>& batch) {
+        std::vector<int> batch_open_ports;
+        std::unordered_map<int, int> retries;
+        std::unordered_map<int, std::chrono::steady_clock::time_point> last_sent;
+
+        for (int port : batch) {
+            send_syn_packet(port);
+            last_sent[port] = std::chrono::steady_clock::now();
+        }
+
+        int timeout_ms = INITIAL_TIMEOUT_MS;
+        while (!batch.empty()) {
+            auto response_ports = receive_syn_ack(batch, timeout_ms);
+            for (int port : response_ports) {
+                batch_open_ports.push_back(port);
+                retries.erase(port);
+                last_sent.erase(port);
+            }
+
+            auto now = std::chrono::steady_clock::now();
+            for (auto it = last_sent.begin(); it != last_sent.end();) {
+                if (std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second).count() > timeout_ms) {
+                    if (retries[it->first] < MAX_RETRIES) {
+                        send_syn_packet(it->first);
+                        it->second = now;
+                        retries[it->first]++;
+                        timeout_ms = std::min(timeout_ms * 2, 1000); // Exponential backoff, max 1 second
+                        ++it;
+                    } else {
+                        it = last_sent.erase(it);
+                    }
+                } else {
+                    ++it;
+                }
+            }
+        }
+
+        std::lock_guard<std::mutex> lock(mutex);
+        open_ports.insert(open_ports.end(), batch_open_ports.begin(), batch_open_ports.end());
+        --active_threads;
+    };
+
+    for (int i = 0; i < ports_to_scan.size(); i += BATCH_SIZE) {
+        int batch_end = std::min(i + BATCH_SIZE, (int)ports_to_scan.size());
+        std::vector<int> batch(ports_to_scan.begin() + i, ports_to_scan.begin() + batch_end);
+
+        while (active_threads >= MAX_THREADS) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+
+        ++active_threads;
+        std::thread(scan_batch, batch).detach();
+    }
+
+    while (active_threads > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     return open_ports;
