@@ -10,14 +10,16 @@
 #include <unordered_map>
 
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        std::cout << "Usage: " << argv[0] << " <ip_address> <scan_type>" << std::endl;
+    if (argc < 3 || argc > 4) {
+        std::cout << "Usage: " << argv[0] << " <ip_address> <scan_type> [--os]" << std::endl;
         std::cout << "scan_type: tcp, syn, udp" << std::endl;
         return 1;
     }
 
     std::string target = argv[1];
     std::string scan_type = argv[2];
+    bool estimate_os_flag = (argc == 4 && std::string(argv[3]) == "--os");
+
     std::vector<int> open_ports;
 
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -28,6 +30,11 @@ int main(int argc, char* argv[]) {
     } else if (scan_type == "syn") {
         SynScanner syn_scanner(target);
         open_ports = syn_scanner.syn_scan(1, 65535);  // Perform SYN scan on all ports
+
+        if (estimate_os_flag) {
+            std::string os_estimation = syn_scanner.detect_os();
+            std::cout << os_estimation << std::endl;
+        }
     } else if (scan_type == "udp") {
         std::cout << "UDP scan is not implemented yet." << std::endl;
         return 1;
