@@ -23,7 +23,6 @@ int main(int argc, char* argv[]) {
         SynScanner syn_scanner(target);
         open_ports = syn_scanner.syn_scan(1, 65535);  // Perform SYN scan on all ports
     } else if (scan_type == "udp") {
-        // Placeholder for UDP scan implementation
         std::cout << "UDP scan is not implemented yet." << std::endl;
         return 1;
     } else {
@@ -31,7 +30,17 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    Output::print_results(target, open_ports);
+    std::cout << "Starting my_nmap\n";
+    std::cout << "Nmap scan report for " << target << "\n";
+    if (!open_ports.empty()) {
+        std::cout << "Host is up.\n";
+        std::cout << "Not shown: " << (65535 - open_ports.size()) << " closed ports\n";
+        for (const int& port : open_ports) {
+            std::cout << port << "/tcp open\n";
+        }
+    } else {
+        std::cout << "All scanned ports are closed.\n";
+    }
 
     return 0;
 }
