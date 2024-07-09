@@ -1,22 +1,22 @@
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Iinclude -I/opt/homebrew/Cellar/libtins/4.5/include
-LDFLAGS = -lpthread -L/opt/homebrew/Cellar/libtins/4.5/lib -ltins
+CXXFLAGS = -std=c++11 -Wall -Iinclude
 
-TARGET = bin/my_nmap
-SRCS = src/main.cpp src/scanner.cpp src/output.cpp src/syn_scanner.cpp
-HEADERS = include/scanner.h include/output.h include/syn_scanner.h
-
-OBJS = $(patsubst src/%.cpp, bin/%.o, $(SRCS))
+SRC_DIR = src
+OBJ_DIR = bin
+BIN_DIR = bin
+SRC_FILES = $(wildcard $(SRC_DIR)/*.cpp)
+OBJ_FILES = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
+TARGET = $(BIN_DIR)/my_nmap
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	@mkdir -p $(dir $@)
-	$(CXX) -o $(TARGET) $(OBJS) $(LDFLAGS)
+$(TARGET): $(OBJ_FILES)
+	@mkdir -p $(BIN_DIR)
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJ_FILES)
 
-bin/%.o: src/%.cpp $(HEADERS)
-	@mkdir -p $(dir $@)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f bin/*.o $(TARGET)
+	rm -f $(OBJ_DIR)/*.o $(TARGET)

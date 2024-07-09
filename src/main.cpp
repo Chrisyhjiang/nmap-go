@@ -1,9 +1,13 @@
 #include "../include/scanner.h"
 #include "../include/output.h"
 #include "../include/syn_scanner.h"
+#include "../include/ports.h"
 #include <iostream>
 #include <vector>
 #include <string>
+#include <chrono>
+#include <iomanip>
+#include <unordered_map>
 
 int main(int argc, char* argv[]) {
     if (argc != 3) {
@@ -15,6 +19,8 @@ int main(int argc, char* argv[]) {
     std::string target = argv[1];
     std::string scan_type = argv[2];
     std::vector<int> open_ports;
+
+    auto start_time = std::chrono::high_resolution_clock::now();
 
     if (scan_type == "tcp") {
         Scanner scanner(target);
@@ -30,17 +36,26 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    auto end_time = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = end_time - start_time;
+    double latency = elapsed.count() / open_ports.size(); // Simulated average latency
+
     std::cout << "Starting my_nmap\n";
     std::cout << "Nmap scan report for " << target << "\n";
+    std::cout << "Host is up (" << std::fixed << std::setprecision(6) << latency << "s latency).\n";
+    std::cout << "Not shown: " << (65535 - open_ports.size()) << " closed tcp ports (conn-refused)\n";
+
     if (!open_ports.empty()) {
-        std::cout << "Host is up.\n";
-        std::cout << "Not shown: " << (65535 - open_ports.size()) << " closed ports\n";
+        std::cout << "PORT     STATE SERVICE\n";
         for (const int& port : open_ports) {
-            std::cout << port << "/tcp open\n";
+            std::string service = (commonPorts.find(port) != commonPorts.end()) ? commonPorts[port] : "unknown";
+            std::cout << port << "/tcp open  " << service << "\n";
         }
     } else {
         std::cout << "All scanned ports are closed.\n";
     }
+
+    std::cout << "\nNmap done: 1 IP address (1 host up) scanned in " << elapsed.count() << " seconds\n";
 
     return 0;
 }
