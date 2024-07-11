@@ -1,55 +1,174 @@
 #include "scanner.h"
-#include <sys/socket.h>
+#include <iostream>
 #include <arpa/inet.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <cstring>
-#include <thread>
-#include <mutex>
+#include <algorithm>
+#include <random>
 
 Scanner::Scanner(const std::string& target) : target_(target) {}
 
-std::vector<int> Scanner::scan(int start_port, int end_port) {
-    std::vector<int> open_ports;
-    std::mutex mutex;
-
-    auto scan_range = [&](int start, int end) {
-        for (int port = start; port <= end; ++port) {
-            if (is_port_open(port)) {
-                std::lock_guard<std::mutex> lock(mutex);
-                open_ports.push_back(port);
-            }
-        }
+void Scanner::load_os_database() {
+    // This is a simplified version. In a real implementation, you'd load from a file.
+    os_database = {
+        {"Apple macOS 12.X", "Apple macOS 12 (Monterey) (Darwin 21.1.0 - 21.6.0)", 64, 65535, "MSS,NOP,WS,NOP,NOP,TS"},
+        {"Linux 5.X", "Linux 5.0 - 5.15", 64, 29200, "MSS,SACK,TS,NOP,WS"},
+        {"Windows 10", "Microsoft Windows 10 1809 - 21H2", 128, 65535, "MSS,NOP,WS,NOP,NOP,TS"}
     };
-
-    const int num_threads = 4;
-    std::vector<std::thread> threads;
-    int ports_per_thread = (end_port - start_port + 1) / num_threads;
-
-    for (int i = 0; i < num_threads; ++i) {
-        int thread_start = start_port + i * ports_per_thread;
-        int thread_end = (i == num_threads - 1) ? end_port : thread_start + ports_per_thread - 1;
-        threads.emplace_back(scan_range, thread_start, thread_end);
-    }
-
-    for (auto& thread : threads) {
-        thread.join();
-    }
-
-    return open_ports;
 }
 
-bool Scanner::is_port_open(int port) {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) return false;
+Scanner::OSFingerprint Scanner::get_target_fingerprint() {
+    OSFingerprint fingerprint;
+    int sock = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
+    if (sock < 0) {
+        std::cerr << "Error creating socket" << std::endl;
+        return fingerprint;
+    }
 
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    inet_pton(AF_INET, target_.c_str(), &server_addr.sin_addr);
+    struct sockaddr_in dest;
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(80);
+    inet_pton(AF_INET, target_.c_str(), &dest.sin_addr);
 
-    int result = connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
+    char packet[4096];
+    struct ip *ip_header = (struct ip *)packet;
+    struct tcphdr *tcp_header = (struct tcphdr *)(packet + sizeof(struct ip));
+
+    // Prepare IP header
+    ip_header->ip_hl = 5;
+    ip_header->ip_v = 4;
+    ip_header->ip_tos = 0;
+    ip_header->ip_len = sizeof(struct ip) + sizeof(struct tcphdr);
+    ip_header->ip_id = htons(54321);
+    ip_header->ip_off = 0;
+    ip_header->ip_ttl = 64;
+    ip_header->ip_p = IPPROTO_TCP;
+    ip_header->ip_sum = 0;
+    ip_header->ip_src.s_addr = inet_addr("192.168.1.1");
+    ip_header->ip_dst = dest.sin_addr;
+
+    // Prepare TCP header
+    tcp_header->th_sport = htons(12345);
+    tcp_header->th_dport = htons(80);
+    tcp_header->th_seq = htonl(1000);
+    tcp_header->th_ack = 0;
+    tcp_header->th_off = 5;
+    tcp_header->th_flags = TH_SYN;
+    tcp_header->th_win = htons(65535);
+    tcp_header->th_sum = 0;
+    tcp_header->th_urp = 0;
+
+    // Send packet and receive response
+    if (sendto(sock, packet, ip_header->ip_len, 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+        std::cerr << "Error sending packet" << std::endl;
+        close(sock);
+        return fingerprint;
+    }
+
+    char buffer[4096];
+    struct sockaddr_in from;
+    socklen_t fromlen = sizeof(from);
+    int received = recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&from, &fromlen);
+
+    if (received > 0) {
+        struct ip *ip_reply = (struct ip *)buffer;
+        struct tcphdr *tcp_reply = (struct tcphdr *)(buffer + sizeof(struct ip));
+
+        fingerprint.ttl = ip_reply->ip_ttl;
+        fingerprint.window_size = ntohs(tcp_reply->th_win);
+        // Parse TCP options (simplified)
+        fingerprint.tcp_options = "MSS,NOP,WS,NOP,NOP,TS";
+    }
+
     close(sock);
+    return fingerprint;
+}
 
-    return result == 0;
+std::string Scanner::match_fingerprint(const OSFingerprint& target) {
+    for (const auto& db_entry : os_database) {
+        if (db_entry.ttl == target.ttl &&
+            db_entry.window_size == target.window_size &&
+            db_entry.tcp_options == target.tcp_options) {
+            return db_entry.os_name + "\nOS details: " + db_entry.os_details;
+        }
+    }
+    return "Unknown OS";
+}
+
+std::string Scanner::detect_os() {
+    load_os_database();
+    OSFingerprint target_fp = get_target_fingerprint();
+    return "Running: " + match_fingerprint(target_fp);
+}
+
+std::vector<char> Scanner::fragment_packet(const std::vector<char>& packet, int fragment_size) {
+    std::vector<char> fragments;
+    for (size_t i = 0; i < packet.size(); i += fragment_size) {
+        fragments.insert(fragments.end(), packet.begin() + i, packet.begin() + std::min(i + fragment_size, packet.size()));
+    }
+    return fragments;
+}
+
+void Scanner::send_decoy_packets(const std::string& real_src_ip, int src_port, int dst_port) {
+    std::vector<std::string> decoy_ips = {"10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4", "10.0.0.5"};
+    for (const auto& decoy_ip : decoy_ips) {
+        send_packet(decoy_ip, src_port, dst_port);
+    }
+    send_packet(real_src_ip, src_port, dst_port);
+}
+
+void Scanner::send_packet(const std::string& src_ip, int src_port, int dst_port) {
+    int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (sock < 0) {
+        std::cerr << "Error creating socket" << std::endl;
+        return;
+    }
+
+    struct sockaddr_in dest;
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(dst_port);
+    inet_pton(AF_INET, target_.c_str(), &dest.sin_addr);
+
+    std::vector<char> packet(4096);
+    struct ip *ip_header = (struct ip *)packet.data();
+    struct tcphdr *tcp_header = (struct tcphdr *)(packet.data() + sizeof(struct ip));
+
+    // Prepare IP header
+    ip_header->ip_hl = 5;
+    ip_header->ip_v = 4;
+    ip_header->ip_tos = 0;
+    ip_header->ip_len = htons(sizeof(struct ip) + sizeof(struct tcphdr));
+    ip_header->ip_id = htons(54321);
+    ip_header->ip_off = 0;
+    ip_header->ip_ttl = 255;
+    ip_header->ip_p = IPPROTO_TCP;
+    ip_header->ip_sum = 0;
+    ip_header->ip_src.s_addr = inet_addr(src_ip.c_str());
+    ip_header->ip_dst = dest.sin_addr;
+
+    // Prepare TCP header
+    tcp_header->th_sport = htons(src_port);
+    tcp_header->th_dport = htons(dst_port);
+    tcp_header->th_seq = htonl(1000);
+    tcp_header->th_ack = 0;
+    tcp_header->th_off = 5;
+    tcp_header->th_flags = TH_SYN;
+    tcp_header->th_win = htons(65535);
+    tcp_header->th_sum = 0;
+    tcp_header->th_urp = 0;
+
+    // Fragment the packet
+    std::vector<char> fragments = fragment_packet(packet);
+
+    // Send fragments
+    for (const auto& fragment : fragments) {
+        if (sendto(sock, fragment.data(), fragment.size(), 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+            std::cerr << "Error sending packet" << std::endl;
+        }
+    }
+
+    close(sock);
 }

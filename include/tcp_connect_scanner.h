@@ -1,9 +1,9 @@
 #pragma once
 #include "scanner.h"
 
-class SynScanner : public Scanner {
+class TCPConnectScanner : public Scanner {
 public:
-    SynScanner(const std::string& target);
+    TCPConnectScanner(const std::string& target);
 
     std::vector<int> scan(int start_port, int end_port) override;
 

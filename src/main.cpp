@@ -19,6 +19,7 @@ int main(int argc, char* argv[]) {
     std::string target = argv[1];
     std::string scan_type = argv[2];
     bool estimate_os_flag = (argc == 4 && std::string(argv[3]) == "--os");
+    std::cout << estimate_os_flag << std::endl;
 
     std::vector<int> open_ports;
 
@@ -29,6 +30,7 @@ int main(int argc, char* argv[]) {
         open_ports = scanner.scan(1, 65535);  // Scan all ports
     } else if (scan_type == "syn") {
         SynScanner syn_scanner(target);
+        
         open_ports = syn_scanner.syn_scan(1, 65535);  // Perform SYN scan on all ports
 
         if (estimate_os_flag) {
