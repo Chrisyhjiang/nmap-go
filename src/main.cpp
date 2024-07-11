@@ -7,7 +7,7 @@
 int main(int argc, char* argv[]) {
     if (argc != 3) {
         std::cout << "Usage: " << argv[0] << " <ip_address> <scan_type>" << std::endl;
-        std::cout << "scan_type: tcp, syn, udp" << std::endl;
+        std::cout << "scan_type: tcp, syn" << std::endl;
         return 1;
     }
 
@@ -21,9 +21,6 @@ int main(int argc, char* argv[]) {
     } else if (scan_type == "syn") {
         SynScanner syn_scanner(target);
         open_ports = syn_scanner.scan(1, 65535);  // Perform SYN scan on all ports
-    } else if (scan_type == "udp") {
-        std::cout << "UDP scan is not implemented yet." << std::endl;
-        return 1;
     } else {
         std::cout << "Unknown scan type: " << scan_type << std::endl;
         return 1;

@@ -173,7 +173,7 @@ void Scanner::send_packet(const std::string& src_ip, int src_port, int dst_port)
     tcp_header->th_urp = 0;
 
     // Fragment the packet
-    std::vector<std::vector<char>> fragments = fragment_packet(packet);
+    std::vector<std::vector<char>> fragments = fragment_packet(packet, 8); // specify the fragment size
 
     // Send fragments
     for (const auto& fragment : fragments) {

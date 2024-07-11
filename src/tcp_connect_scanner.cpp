@@ -5,6 +5,7 @@
 #include <cstring>
 #include <thread>
 #include <mutex>
+#include <vector>
 
 TCPConnectScanner::TCPConnectScanner(const std::string& target) : Scanner(target) {}
 
