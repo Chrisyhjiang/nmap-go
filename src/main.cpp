@@ -4,16 +4,18 @@
 #include <vector>
 #include <string>
 
+using namespace std;
+
 int main(int argc, char* argv[]) {
     if (argc != 3) {
-        std::cout << "Usage: " << argv[0] << " <ip_address> <scan_type>" << std::endl;
-        std::cout << "scan_type: tcp, syn" << std::endl;
+        cout << "Usage: " << argv[0] << " <ip_address> <scan_type>" << std::endl;
+        cout << "scan_type: tcp, syn" << std::endl;
         return 1;
     }
 
-    std::string target = argv[1];
-    std::string scan_type = argv[2];
-    std::vector<int> open_ports;
+    string target = argv[1];
+    string scan_type = argv[2];
+    vector<int> open_ports;
 
     if (scan_type == "tcp") {
         TCPConnectScanner scanner(target);
@@ -22,21 +24,20 @@ int main(int argc, char* argv[]) {
         SynScanner syn_scanner(target);
         open_ports = syn_scanner.scan(1, 65535);  // Perform SYN scan on all ports
     } else {
-        std::cout << "Unknown scan type: " << scan_type << std::endl;
+        cout << "Unknown scan type: " << scan_type << std::endl;
         return 1;
     }
 
-    std::cout << "Starting my_nmap\n";
-    std::cout << "Nmap scan report for " << target << "\n";
+    cout << "Starting my_nmap\n";
+    cout << "Nmap scan report for " << target << "\n";
     if (!open_ports.empty()) {
-        std::cout << "Host is up.\n";
-        std::cout << "Not shown: " << (65535 - open_ports.size()) << " closed ports\n";
+        cout << "Host is up.\n";
+        cout << "Not shown: " << (65535 - open_ports.size()) << " closed ports\n";
         for (const int& port : open_ports) {
-            std::cout << port << "/tcp open\n";
+            cout << port << "/tcp open\n";
         }
     } else {
-        std::cout << "All scanned ports are closed.\n";
+        cout << "All scanned ports are closed.\n";
     }
-
     return 0;
 }
