@@ -1,16 +1,21 @@
 #include "scanner.h"
-#include <iostream>
-#include <arpa/inet.h>
-#include <netinet/ip.h>
-#include <netinet/tcp.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <unistd.h>
+#include <netinet/ip.h>  // For ip header
+#include <netinet/tcp.h> // For tcp header
 #include <cstring>
-#include <algorithm>
+#include <thread>
+#include <mutex>
+#include <iostream>
 #include <random>
+#include <vector>
+#include <algorithm>
 
+// Constructor definition
 Scanner::Scanner(const std::string& target) : target_(target) {}
 
+// Load OS database
 void Scanner::load_os_database() {
     // This is a simplified version. In a real implementation, you'd load from a file.
     os_database = {
@@ -20,6 +25,7 @@ void Scanner::load_os_database() {
     };
 }
 
+// Get target fingerprint
 Scanner::OSFingerprint Scanner::get_target_fingerprint() {
     OSFingerprint fingerprint;
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
@@ -87,6 +93,7 @@ Scanner::OSFingerprint Scanner::get_target_fingerprint() {
     return fingerprint;
 }
 
+// Match fingerprint
 std::string Scanner::match_fingerprint(const OSFingerprint& target) {
     for (const auto& db_entry : os_database) {
         if (db_entry.ttl == target.ttl &&
@@ -98,20 +105,24 @@ std::string Scanner::match_fingerprint(const OSFingerprint& target) {
     return "Unknown OS";
 }
 
+// Detect OS
 std::string Scanner::detect_os() {
     load_os_database();
     OSFingerprint target_fp = get_target_fingerprint();
     return "Running: " + match_fingerprint(target_fp);
 }
 
-std::vector<char> Scanner::fragment_packet(const std::vector<char>& packet, int fragment_size) {
-    std::vector<char> fragments;
+// Fragment packet
+std::vector<std::vector<char>> Scanner::fragment_packet(const std::vector<char>& packet, int fragment_size) {
+    std::vector<std::vector<char>> fragments;
     for (size_t i = 0; i < packet.size(); i += fragment_size) {
-        fragments.insert(fragments.end(), packet.begin() + i, packet.begin() + std::min(i + fragment_size, packet.size()));
+        std::vector<char> fragment(packet.begin() + i, packet.begin() + std::min(i + fragment_size, packet.size()));
+        fragments.push_back(fragment);
     }
     return fragments;
 }
 
+// Send decoy packets
 void Scanner::send_decoy_packets(const std::string& real_src_ip, int src_port, int dst_port) {
     std::vector<std::string> decoy_ips = {"10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4", "10.0.0.5"};
     for (const auto& decoy_ip : decoy_ips) {
@@ -120,6 +131,7 @@ void Scanner::send_decoy_packets(const std::string& real_src_ip, int src_port, i
     send_packet(real_src_ip, src_port, dst_port);
 }
 
+// Send packet
 void Scanner::send_packet(const std::string& src_ip, int src_port, int dst_port) {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if (sock < 0) {
@@ -161,7 +173,7 @@ void Scanner::send_packet(const std::string& src_ip, int src_port, int dst_port)
     tcp_header->th_urp = 0;
 
     // Fragment the packet
-    std::vector<char> fragments = fragment_packet(packet);
+    std::vector<std::vector<char>> fragments = fragment_packet(packet);
 
     // Send fragments
     for (const auto& fragment : fragments) {
