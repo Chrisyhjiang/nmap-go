@@ -11,7 +11,7 @@ MyNmap is a custom-built port scanner written in C++. It implements various scan
 
 ## Project Structure
 
-.
+```
 ├── LICENSE
 ├── Makefile
 ├── README.md
@@ -31,6 +31,7 @@ MyNmap is a custom-built port scanner written in C++. It implements various scan
 ├── scanner.cpp
 ├── syn_scanner.cpp
 └── tcp_connect_scanner.cpp
+```
 
 ## Dependencies
 
