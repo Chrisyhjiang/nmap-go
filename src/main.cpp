@@ -3,30 +3,42 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <memory>
 
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        cout << "Usage: " << argv[0] << " <ip_address> <scan_type>" << std::endl;
+    if (argc < 3) {
+        cout << "Usage: " << argv[0] << " <ip_address> <scan_type> [--os-detect]" << std::endl;
         cout << "scan_type: tcp, syn" << std::endl;
         return 1;
     }
 
     string target = argv[1];
     string scan_type = argv[2];
-    vector<int> open_ports;
+    bool os_detect = false;
+
+    if (argc == 4 && string(argv[3]) == "--os") {
+        os_detect = true;
+    }
+
+    unique_ptr<Scanner> scanner;
 
     if (scan_type == "tcp") {
-        TCPConnectScanner scanner(target);
-        open_ports = scanner.scan(1, 65535);  // Scan all ports
+        scanner = make_unique<TCPConnectScanner>(target);
     } else if (scan_type == "syn") {
-        SynScanner syn_scanner(target);
-        open_ports = syn_scanner.scan(1, 65535);  // Perform SYN scan on all ports
+        scanner = make_unique<SynScanner>(target);
     } else {
         cout << "Unknown scan type: " << scan_type << std::endl;
         return 1;
     }
+
+    if (os_detect) {
+        string os_info = scanner->detect_os();
+        cout << "OS Detection: " << os_info << std::endl;
+    }
+
+    vector<int> open_ports = scanner->scan(1, 65535);  // Scan all ports
 
     cout << "Starting my_nmap\n";
     cout << "Nmap scan report for " << target << "\n";
@@ -39,5 +51,6 @@ int main(int argc, char* argv[]) {
     } else {
         cout << "All scanned ports are closed.\n";
     }
+
     return 0;
 }
