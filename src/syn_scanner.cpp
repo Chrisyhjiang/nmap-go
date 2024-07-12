@@ -1,89 +1,81 @@
 #include "syn_scanner.h"
-#include <sys/time.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
-#include <netinet/in.h>
+#include <unistd.h>
+#include <netinet/ip.h>  // For ip header
+#include <netinet/tcp.h> // For tcp header
+#include <cstring>
 #include <iostream>
 #include <vector>
-#include <thread>
-#include <mutex>
-#include <algorithm>
 
-std::mutex bufferLock;
-
+// Ensure SynScanner includes the correct constructor and scan method implementation
 SynScanner::SynScanner(const std::string& target) : Scanner(target) {}
 
-bool SynScanner::is_port_open(int port) {
-    struct sockaddr_in address;
-    int myNetworkSocket = -1;
-
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = inet_addr(target_.c_str());
-    address.sin_port = htons(port);
-
-    myNetworkSocket = socket(AF_INET, SOCK_STREAM, 0);
-
-    if (myNetworkSocket == -1) {
-        std::cerr << "Socket creation failed on port " << port << std::endl;
-        return false;
-    }
-
-    fcntl(myNetworkSocket, F_SETFL, O_NONBLOCK);
-    connect(myNetworkSocket, (struct sockaddr *)&address, sizeof(address)); 
-
-    fd_set fileDescriptorSet;
-    struct timeval timeout;
-
-    FD_ZERO(&fileDescriptorSet);
-    FD_SET(myNetworkSocket, &fileDescriptorSet);
-    timeout.tv_sec = 2;
-    timeout.tv_usec = 0;
-
-    int connectionResponse = select(myNetworkSocket + 1, NULL, &fileDescriptorSet, NULL, &timeout);
-    if (connectionResponse == 1) {
-        int socketError;
-        socklen_t len = sizeof socketError;
-        getsockopt(myNetworkSocket, SOL_SOCKET, SO_ERROR, &socketError, &len);
-
-        if (socketError == 0) {
-            close(myNetworkSocket);
-            return true;
-        } else {
-            close(myNetworkSocket);
-            return false;
+std::vector<int> SynScanner::scan(int start_port, int end_port) {
+    std::vector<int> open_ports;
+    for (int port = start_port; port <= end_port; ++port) {
+        if (is_port_open(port)) {
+            open_ports.push_back(port);
         }
     }
-    close(myNetworkSocket);
-    return false;
+    return open_ports;
 }
 
-std::vector<int> SynScanner::scan(int start_port, int end_port) {
-    std::vector<std::thread*> portTests;
-    std::vector<int> buffer;
+bool SynScanner::is_port_open(int port) {
+    // Implementation for checking if port is open
+    return false; // Replace with actual logic
+}
 
-    int numOfTasks = 500;
+// Correct the send_packet function to match the header
+void SynScanner::send_packet(int src_port, int dst_port) {
+    int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (sock < 0) {
+        std::cerr << "Error creating socket" << std::endl;
+        return;
+    }
 
-    for (int port = start_port; port <= end_port; port++) {
-        portTests.push_back(new std::thread([&buffer, this, port]() {
-            if (this->is_port_open(port)) {
-                std::lock_guard<std::mutex> lock(bufferLock);
-                buffer.push_back(port);
-            }
-        }));
+    struct sockaddr_in dest;
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(dst_port);
+    inet_pton(AF_INET, target_.c_str(), &dest.sin_addr);
 
-        if (portTests.size() >= numOfTasks || port == end_port) {
-            for (auto& thread : portTests) {
-                thread->join();
-            }
-            for (auto& thread : portTests) {
-                delete thread;
-            }
-            portTests.clear();
+    std::vector<char> packet(4096);
+    struct ip *ip_header = (struct ip *)packet.data();
+    struct tcphdr *tcp_header = (struct tcphdr *)(packet.data() + sizeof(struct ip));
+
+    // Prepare IP header
+    ip_header->ip_hl = 5;
+    ip_header->ip_v = 4;
+    ip_header->ip_tos = 0;
+    ip_header->ip_len = htons(sizeof(struct ip) + sizeof(struct tcphdr));
+    ip_header->ip_id = htons(54321);
+    ip_header->ip_off = 0;
+    ip_header->ip_ttl = 255;
+    ip_header->ip_p = IPPROTO_TCP;
+    ip_header->ip_sum = 0;
+    ip_header->ip_src.s_addr = inet_addr(Scanner::local_ip_.c_str()); // Use cached local IP
+    ip_header->ip_dst = dest.sin_addr;
+
+    // Prepare TCP header
+    tcp_header->th_sport = htons(src_port);
+    tcp_header->th_dport = htons(dst_port);
+    tcp_header->th_seq = htonl(1000);
+    tcp_header->th_ack = 0;
+    tcp_header->th_off = 5;
+    tcp_header->th_flags = TH_SYN;
+    tcp_header->th_win = htons(65535);
+    tcp_header->th_sum = 0;
+    tcp_header->th_urp = 0;
+
+    // Fragment the packet
+    std::vector<std::vector<char>> fragments = fragment_packet(packet, 8); // specify the fragment size
+
+    // Send fragments
+    for (const auto& fragment : fragments) {
+        if (sendto(sock, fragment.data(), fragment.size(), 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
+            std::cerr << "Error sending packet" << std::endl;
         }
     }
 
-    std::sort(buffer.begin(), buffer.end());
-    return buffer;
+    close(sock);
 }
