@@ -8,4 +8,5 @@ public:
 
 protected:
     bool is_port_open(int port) override;
+    void send_packet(int src_port, int dst_port) override; // Add this line
 };
