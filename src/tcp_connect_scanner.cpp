@@ -54,3 +54,7 @@ bool TCPConnectScanner::is_port_open(int port) {
 
     return result == 0;
 }
+
+void TCPConnectScanner::send_packet(int src_port, int dst_port) {
+    // Empty implementation since it's not needed for TCP connect scan
+}

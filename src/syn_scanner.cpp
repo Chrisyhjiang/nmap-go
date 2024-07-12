@@ -71,7 +71,7 @@ void SynScanner::scan_range(int start_port, int end_port, std::vector<int>& open
     while (!ports_to_scan.empty()) {
         int in_flight = 0;
         for (auto it = ports_to_scan.begin(); it != ports_to_scan.end() && in_flight < max_in_flight;) {
-            send_probe(sock, *it);
+            send_packet(sock, *it);
             ++in_flight;
             it = ports_to_scan.erase(it);
         }
@@ -110,33 +110,7 @@ void SynScanner::scan_range(int start_port, int end_port, std::vector<int>& open
     close(sock);
 }
 
-void SynScanner::send_packet(int src_port, int dst_port) {
-    int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    if (sock < 0) {
-        std::cerr << "Error creating socket" << std::endl;
-        return;
-    }
-
-    std::vector<char> packet(4096);
-    prepare_packet(packet, src_port, dst_port);
-
-    struct sockaddr_in dest;
-    dest.sin_family = AF_INET;
-    dest.sin_port = htons(dst_port);
-    inet_pton(AF_INET, target_.c_str(), &dest.sin_addr);
-
-    std::vector<std::vector<char>> fragments = fragment_packet(packet, 8);
-
-    for (const auto& fragment : fragments) {
-        if (sendto(sock, fragment.data(), fragment.size(), 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
-            std::cerr << "Error sending packet" << std::endl;
-        }
-    }
-
-    close(sock);
-}
-
-void SynScanner::send_probe(int sock, int port) {
+void SynScanner::send_packet(int sock, int port) {
     std::vector<char> packet(4096);
     prepare_packet(packet, 12345, port);
 
@@ -170,7 +144,7 @@ bool SynScanner::is_port_open(int port) {
         return false;
     }
 
-    send_probe(sock, port);
+    send_packet(sock, port);
 
     char buffer[4096];
     struct sockaddr_in from;

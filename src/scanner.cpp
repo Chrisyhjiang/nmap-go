@@ -56,7 +56,7 @@ void Scanner::initialize_local_ip() {
     }
 
     local_ip_ = buffer;
-    std::cout << "Cached Local IP Address: " << local_ip_ << std::endl;
+    // std::cout << "Cached Local IP Address: " << local_ip_ << std::endl;
     close(sock);
 }
 

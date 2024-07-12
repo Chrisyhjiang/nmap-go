@@ -12,7 +12,7 @@ public:
     virtual std::vector<int> scan(int start_port, int end_port) = 0;
     virtual bool is_port_open(int port) = 0;
 
-    virtual void send_packet(int src_port, int dst_port) = 0;
+    virtual void send_packet(int sock, int port) = 0;
     void send_decoy_packets(int src_port, int dst_port);
 
 protected:
