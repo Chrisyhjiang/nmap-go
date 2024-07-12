@@ -18,8 +18,8 @@ int main(int argc, char* argv[]) {
     vector<int> open_ports;
 
     if (scan_type == "tcp") {
-        TCPConnectScanner scanner(target);
-        open_ports = scanner.scan(1, 65535);  // Scan all ports
+        // TCPConnectScanner scanner(target);
+        // open_ports = scanner.scan(1, 65535);  // Scan all ports
     } else if (scan_type == "syn") {
         SynScanner syn_scanner(target);
         open_ports = syn_scanner.scan(1, 65535);  // Perform SYN scan on all ports

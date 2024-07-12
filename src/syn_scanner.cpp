@@ -2,31 +2,114 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <netinet/ip.h>  // For ip header
-#include <netinet/tcp.h> // For tcp header
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include <algorithm>
+#include <thread>
+#include <mutex>
+#include <chrono>
+#include <sys/event.h>
+#include <fcntl.h>
 
-// Ensure SynScanner includes the correct constructor and scan method implementation
 SynScanner::SynScanner(const std::string& target) : Scanner(target) {}
 
 std::vector<int> SynScanner::scan(int start_port, int end_port) {
     std::vector<int> open_ports;
-    for (int port = start_port; port <= end_port; ++port) {
-        if (is_port_open(port)) {
-            open_ports.push_back(port);
-        }
+    std::vector<std::thread> threads;
+    int num_threads = 12; // Adjust the number of threads based on your needs
+    int ports_per_thread = (end_port - start_port + 1) / num_threads;
+
+    for (int i = 0; i < num_threads; ++i) {
+        int thread_start_port = start_port + i * ports_per_thread;
+        int thread_end_port = (i == num_threads - 1) ? end_port : thread_start_port + ports_per_thread - 1;
+        threads.emplace_back(&SynScanner::scan_range, this, thread_start_port, thread_end_port, std::ref(open_ports));
     }
+
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    std::sort(open_ports.begin(), open_ports.end());
     return open_ports;
 }
 
-bool SynScanner::is_port_open(int port) {
-    // Implementation for checking if port is open
-    return false; // Replace with actual logic
+void SynScanner::scan_range(int start_port, int end_port, std::vector<int>& open_ports) {
+    int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (sock < 0) {
+        std::cerr << "Error creating socket" << std::endl;
+        return;
+    }
+
+    int kq = kqueue();
+    if (kq == -1) {
+        std::cerr << "Error creating kqueue instance" << std::endl;
+        close(sock);
+        return;
+    }
+
+    struct kevent ev;
+    EV_SET(&ev, sock, EVFILT_READ, EV_ADD, 0, 0, nullptr);
+    if (kevent(kq, &ev, 1, nullptr, 0, nullptr) == -1) {
+        std::cerr << "Error adding socket to kqueue" << std::endl;
+        close(kq);
+        close(sock);
+        return;
+    }
+
+    std::vector<int> ports_to_scan;
+    for (int port = start_port; port <= end_port; ++port) {
+        ports_to_scan.push_back(port);
+    }
+
+    int max_in_flight = 1000; // Adjust based on your needs
+    int timeout_ms = 1000; // Initial timeout
+    auto start_time = std::chrono::steady_clock::now();
+
+    while (!ports_to_scan.empty()) {
+        int in_flight = 0;
+        for (auto it = ports_to_scan.begin(); it != ports_to_scan.end() && in_flight < max_in_flight;) {
+            send_probe(sock, *it);
+            ++in_flight;
+            it = ports_to_scan.erase(it);
+        }
+
+        struct kevent events[max_in_flight];
+        timespec timeout = {timeout_ms / 1000, (timeout_ms % 1000) * 1000000};
+        int nfds = kevent(kq, nullptr, 0, events, max_in_flight, &timeout);
+
+        for (int n = 0; n < nfds; ++n) {
+            if (events[n].ident == sock) {
+                int port = process_response(sock);
+                if (port > 0) {
+                    std::lock_guard<std::mutex> lock(bufferLock);
+                    open_ports.push_back(port);
+                }
+            }
+        }
+
+        // Dynamic timing adjustment
+        auto current_time = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time).count();
+        if (elapsed > 0) {
+            int scan_rate = in_flight * 1000 / elapsed;
+            if (scan_rate > 1000) {
+                max_in_flight = std::min(max_in_flight * 2, 5000);
+                timeout_ms = std::max(timeout_ms / 2, 100);
+            } else if (scan_rate < 100) {
+                max_in_flight = std::max(max_in_flight / 2, 100);
+                timeout_ms = std::min(timeout_ms * 2, 5000);
+            }
+        }
+        start_time = current_time;
+    }
+
+    close(kq);
+    close(sock);
 }
 
-// Correct the send_packet function to match the header
 void SynScanner::send_packet(int src_port, int dst_port) {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if (sock < 0) {
@@ -34,43 +117,16 @@ void SynScanner::send_packet(int src_port, int dst_port) {
         return;
     }
 
+    std::vector<char> packet(4096);
+    prepare_packet(packet, src_port, dst_port);
+
     struct sockaddr_in dest;
     dest.sin_family = AF_INET;
     dest.sin_port = htons(dst_port);
     inet_pton(AF_INET, target_.c_str(), &dest.sin_addr);
 
-    std::vector<char> packet(4096);
-    struct ip *ip_header = (struct ip *)packet.data();
-    struct tcphdr *tcp_header = (struct tcphdr *)(packet.data() + sizeof(struct ip));
+    std::vector<std::vector<char>> fragments = fragment_packet(packet, 8);
 
-    // Prepare IP header
-    ip_header->ip_hl = 5;
-    ip_header->ip_v = 4;
-    ip_header->ip_tos = 0;
-    ip_header->ip_len = htons(sizeof(struct ip) + sizeof(struct tcphdr));
-    ip_header->ip_id = htons(54321);
-    ip_header->ip_off = 0;
-    ip_header->ip_ttl = 255;
-    ip_header->ip_p = IPPROTO_TCP;
-    ip_header->ip_sum = 0;
-    ip_header->ip_src.s_addr = inet_addr(Scanner::local_ip_.c_str()); // Use cached local IP
-    ip_header->ip_dst = dest.sin_addr;
-
-    // Prepare TCP header
-    tcp_header->th_sport = htons(src_port);
-    tcp_header->th_dport = htons(dst_port);
-    tcp_header->th_seq = htonl(1000);
-    tcp_header->th_ack = 0;
-    tcp_header->th_off = 5;
-    tcp_header->th_flags = TH_SYN;
-    tcp_header->th_win = htons(65535);
-    tcp_header->th_sum = 0;
-    tcp_header->th_urp = 0;
-
-    // Fragment the packet
-    std::vector<std::vector<char>> fragments = fragment_packet(packet, 8); // specify the fragment size
-
-    // Send fragments
     for (const auto& fragment : fragments) {
         if (sendto(sock, fragment.data(), fragment.size(), 0, (struct sockaddr *)&dest, sizeof(dest)) < 0) {
             std::cerr << "Error sending packet" << std::endl;
@@ -78,4 +134,73 @@ void SynScanner::send_packet(int src_port, int dst_port) {
     }
 
     close(sock);
+}
+
+void SynScanner::send_probe(int sock, int port) {
+    std::vector<char> packet(4096);
+    prepare_packet(packet, 12345, port);
+
+    struct sockaddr_in dest;
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(port);
+    inet_pton(AF_INET, target_.c_str(), &dest.sin_addr);
+
+    sendto(sock, packet.data(), packet.size(), 0, (struct sockaddr *)&dest, sizeof(dest));
+}
+
+int SynScanner::process_response(int sock) {
+    char buffer[4096];
+    struct sockaddr_in from;
+    socklen_t fromlen = sizeof(from);
+    ssize_t len = recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&from, &fromlen);
+    if (len > 0) {
+        struct ip *ip_header = (struct ip *)buffer;
+        struct tcphdr *tcp_header = (struct tcphdr *)(buffer + (ip_header->ip_hl << 2));
+        if (tcp_header->th_flags & TH_SYN && tcp_header->th_flags & TH_ACK) {
+            return ntohs(tcp_header->th_sport);
+        }
+    }
+    return -1;
+}
+
+bool SynScanner::is_port_open(int port) {
+    int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (sock < 0) {
+        std::cerr << "Error creating socket" << std::endl;
+        return false;
+    }
+
+    send_probe(sock, port);
+
+    char buffer[4096];
+    struct sockaddr_in from;
+    socklen_t fromlen = sizeof(from);
+
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(sock, &readfds);
+
+    struct timeval timeout;
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+
+    int retval = select(sock + 1, &readfds, NULL, NULL, &timeout);
+    if (retval == -1) {
+        std::cerr << "Error on select" << std::endl;
+        close(sock);
+        return false;
+    } else if (retval) {
+        ssize_t len = recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&from, &fromlen);
+        if (len > 0) {
+            struct ip *ip_header = (struct ip *)buffer;
+            struct tcphdr *tcp_header = (struct tcphdr *)(buffer + (ip_header->ip_hl << 2));
+            if (tcp_header->th_flags & TH_SYN && tcp_header->th_flags & TH_ACK) {
+                close(sock);
+                return true;
+            }
+        }
+    }
+
+    close(sock);
+    return false;
 }
