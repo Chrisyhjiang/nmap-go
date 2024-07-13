@@ -2,13 +2,15 @@
 #define SYN_SCANNER_H
 
 #include "scanner.h"
+#include "packets/packet.h"
 #include <vector>
 #include <mutex>
 #include <chrono>
+#include <memory>
 
 class SynScanner : public Scanner {
 public:
-    SynScanner(const std::string& target);
+    SynScanner(const std::string& target, std::shared_ptr<Packet> packet);
     ~SynScanner() = default;
 
     std::vector<int> scan(int start_port, int end_port) override;
@@ -20,6 +22,7 @@ private:
     int process_response(int sock);
 
     std::mutex bufferLock;
+    std::shared_ptr<Packet> packet_;  // Add a member to hold the packet object
 };
 
 #endif // SYN_SCANNER_H

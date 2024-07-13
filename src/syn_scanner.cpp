@@ -14,7 +14,8 @@
 #include <sys/event.h>
 #include <fcntl.h>
 
-SynScanner::SynScanner(const std::string& target) : Scanner(target) {}
+SynScanner::SynScanner(const std::string& target, std::shared_ptr<Packet> packet) 
+    : Scanner(target), packet_(packet) {}
 
 std::vector<int> SynScanner::scan(int start_port, int end_port) {
     std::vector<int> open_ports;
@@ -112,13 +113,12 @@ void SynScanner::scan_range(int start_port, int end_port, std::vector<int>& open
 
 void SynScanner::send_packet(int sock, int port) {
     std::vector<char> packet(4096);
-    prepare_packet(packet, 12345, port);
+    packet_->prepare_packet(packet, 12345, port);
 
     struct sockaddr_in dest;
     dest.sin_family = AF_INET;
     dest.sin_port = htons(port);
     inet_pton(AF_INET, target_.c_str(), &dest.sin_addr);
-
     sendto(sock, packet.data(), packet.size(), 0, (struct sockaddr *)&dest, sizeof(dest));
 }
 

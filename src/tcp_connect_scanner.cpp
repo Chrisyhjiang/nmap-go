@@ -7,14 +7,15 @@
 #include <mutex>
 #include <vector>
 
-TCPConnectScanner::TCPConnectScanner(const std::string& target) : Scanner(target) {}
+TCPConnectScanner::TCPConnectScanner(const std::string& target, std::shared_ptr<Packet> packet)
+    : Scanner(target), packet_(packet) {}
 
 std::vector<int> TCPConnectScanner::scan(int start_port, int end_port) {
     std::vector<int> open_ports;
     std::mutex mutex;
 
     auto scan_range = [&](int start, int end) {
-        for (int port = start; int(port) <= end; ++port) {
+        for (int port = start; port <= end; ++port) {
             if (is_port_open(port)) {
                 std::lock_guard<std::mutex> lock(mutex);
                 open_ports.push_back(port);
@@ -55,6 +56,12 @@ bool TCPConnectScanner::is_port_open(int port) {
     return result == 0;
 }
 
-void TCPConnectScanner::send_packet(int src_port, int dst_port) {
-    // Empty implementation since it's not needed for TCP connect scan
+void TCPConnectScanner::send_packet(int sock, int port) {
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    inet_pton(AF_INET, target_.c_str(), &server_addr.sin_addr);
+
+    connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
 }
