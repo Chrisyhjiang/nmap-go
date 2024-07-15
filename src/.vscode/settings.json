@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "typeinfo": "cpp",
+        "thread": "cpp",
+        "exception": "cpp",
+        "ios": "cpp"
+    }
+}
