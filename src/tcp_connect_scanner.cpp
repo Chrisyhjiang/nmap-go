@@ -1,60 +1,54 @@
 #include "tcp_connect_scanner.h"
+#include <iostream>
+#include <sys/types.h>
 #include <sys/socket.h>
-#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <unistd.h>
-#include <cstring>
-#include <thread>
-#include <mutex>
-#include <vector>
+#include <arpa/inet.h>
 
-TCPConnectScanner::TCPConnectScanner(const std::string& target) : Scanner(target) {}
+TCPConnectScanner::TCPConnectScanner(const IPv4Address& ip, uint16_t total_ports) : Scanner(ip, total_ports) {}
 
-std::vector<int> TCPConnectScanner::scan(int start_port, int end_port) {
-    std::vector<int> open_ports;
-    std::mutex mutex;
+PortStatus TCPConnectScanner::scan_port(uint16_t port) {
+    int sockfd;
+    struct sockaddr_in target;
 
-    auto scan_range = [&](int start, int end) {
-        for (int port = start; int(port) <= end; ++port) {
-            if (is_port_open(port)) {
-                std::lock_guard<std::mutex> lock(mutex);
-                open_ports.push_back(port);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        std::cerr << "Error creating socket" << std::endl;
+        return PortStatus::Filtered;
+    }
+
+    target.sin_family = AF_INET;
+    target.sin_addr.s_addr = inet_addr(target_ip.to_string().c_str());
+    target.sin_port = htons(port);
+
+    int result = connect(sockfd, (struct sockaddr *)&target, sizeof(target));
+    close(sockfd);
+
+    if (result == 0) {
+        return PortStatus::Open;
+    } else {
+        if (errno == ECONNREFUSED) {
+            return PortStatus::Closed;
+        } else {
+            return PortStatus::Filtered;
+        }
+    }
+}
+
+void TCPConnectScanner::scan_ports(uint16_t start_port, uint16_t end_port, std::set<uint16_t>& open_ports) {
+    for (uint16_t port = start_port; port <= end_port && !should_stop; ++port) {
+        PortStatus status = scan_port(port);
+        if (status == PortStatus::Open) {
+            std::lock_guard<std::mutex> lock(mtx);
+            if (open_ports.insert(port).second) {
+                std::cout << "Port " << port << " is open" << std::endl;
             }
         }
-    };
-
-    const int num_threads = 4;
-    std::vector<std::thread> threads;
-    int ports_per_thread = (end_port - start_port + 1) / num_threads;
-
-    for (int i = 0; i < num_threads; ++i) {
-        int thread_start = start_port + i * ports_per_thread;
-        int thread_end = (i == num_threads - 1) ? end_port : thread_start + ports_per_thread - 1;
-        threads.emplace_back(scan_range, thread_start, thread_end);
+        ++scanned_ports;
+        if (scanned_ports >= total_ports) {
+            should_stop = true;
+            break;
+        }
     }
-
-    for (auto& thread : threads) {
-        thread.join();
-    }
-
-    return open_ports;
-}
-
-bool TCPConnectScanner::is_port_open(int port) {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0) return false;
-
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    inet_pton(AF_INET, target_.c_str(), &server_addr.sin_addr);
-
-    int result = connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
-    close(sock);
-
-    return result == 0;
-}
-
-void TCPConnectScanner::send_packet(int src_port, int dst_port) {
-    // Empty implementation since it's not needed for TCP connect scan
 }

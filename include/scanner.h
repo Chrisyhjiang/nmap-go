@@ -1,29 +1,41 @@
 #ifndef SCANNER_H
 #define SCANNER_H
 
-#include <string>
+#include <tins/tins.h>
+#include <set>
+#include <mutex>
+#include <atomic>
 #include <vector>
-#include <future>
+#include <thread>
+#include <chrono>
+
+using namespace Tins;
+
+enum class PortStatus {
+    Open,
+    Closed,
+    Filtered
+};
 
 class Scanner {
-public:
-    Scanner(const std::string& target);
-    virtual ~Scanner() = default;
-    virtual std::vector<int> scan(int start_port, int end_port) = 0;
-    virtual bool is_port_open(int port) = 0;
-
-    virtual void send_packet(int sock, int port) = 0;
-    void send_decoy_packets(int src_port, int dst_port);
-
 protected:
-    std::string target_;
-    static std::string local_ip_;
+    NetworkInterface iface;
+    IPv4Address target_ip;
+    PacketSender sender;
+    std::mutex mtx;
+    std::atomic<uint16_t> scanned_ports{0};
+    std::atomic<bool> should_stop{false};
+    uint16_t total_ports;
 
-    void initialize_local_ip();  // Declare initialize_local_ip function
+    virtual bool is_local_ip(const IPv4Address& ip);
+    virtual PortStatus scan_port(uint16_t port) = 0; // Pure virtual function
 
-    std::vector<std::vector<char>> fragment_packet(const std::vector<char>& packet, int fragment_size);
-
-    void prepare_packet(std::vector<char>& packet, int src_port, int dst_port);
+public:
+    Scanner(const IPv4Address& ip, uint16_t total_ports);
+    virtual ~Scanner() {}  // Virtual destructor
+    virtual void scan_ports(uint16_t start_port, uint16_t end_port, std::set<uint16_t>& open_ports) = 0; // Pure virtual function
+    void stop();
+    void print_progress();
 };
 
 #endif // SCANNER_H

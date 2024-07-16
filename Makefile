@@ -1,5 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Iinclude
+CXXFLAGS = -std=c++11 -Wall -Iinclude -I/opt/homebrew/Cellar/libtins/4.5/include
+LDFLAGS = -L/opt/homebrew/Cellar/libtins/4.5/lib -ltins
 
 SRC_DIR = src
 OBJ_DIR = bin
@@ -12,7 +13,7 @@ all: $(TARGET)
 
 $(TARGET): $(OBJ_FILES)
 	@mkdir -p $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJ_FILES)
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJ_FILES) $(LDFLAGS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(OBJ_DIR)
@@ -20,3 +21,6 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 clean:
 	rm -f $(OBJ_DIR)/*.o $(TARGET)
+
+# Phony targets
+.PHONY: all clean
