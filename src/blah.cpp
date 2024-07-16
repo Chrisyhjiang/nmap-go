@@ -9,8 +9,8 @@ using namespace Tins;
 
 class UDPScanner {
 private:
-    const int TIMEOUT = 2000; // Timeout in milliseconds
-    const int MAX_RETRIES = 2;
+    const int TIMEOUT = 5000; // Timeout in milliseconds
+    const int MAX_RETRIES = 3;
     
     NetworkInterface iface;
     IPv4Address target_ip;
@@ -19,10 +19,12 @@ private:
 
     bool scan_port(uint16_t port) {
         try {
+            // Construct a simple UDP packet
             UDP udp = UDP(port, 12345);
-            IP ip = IP(target_ip, iface.ipv4_address()) / udp / RawPDU("UDP Scan");
+            IP ip = IP(target_ip, iface.ipv4_address()) / udp;
             
             for (int i = 0; i < MAX_RETRIES; ++i) {
+                std::cout << "Sending UDP packet to port " << port << ", try " << (i + 1) << "/" << MAX_RETRIES << std::endl;
                 sender.send(ip);
 
                 SnifferConfiguration config;
@@ -62,6 +64,7 @@ private:
                 }
             }
             
+            std::cout << "No response received for port " << port << " after retries, assuming open." << std::endl;
             return true; // Assume open if no response after retries
         } catch (std::exception& e) {
             std::cerr << "Error scanning port " << port << ": " << e.what() << std::endl;
@@ -70,7 +73,13 @@ private:
     }
 
 public:
-    UDPScanner(const IPv4Address& ip) : target_ip(ip), iface(NetworkInterface::default_interface()) {}
+    UDPScanner(const IPv4Address& ip) : target_ip(ip) {
+        if (target_ip == IPv4Address("127.0.0.1")) {
+            iface = NetworkInterface("lo0"); // Use loopback interface for localhost
+        } else {
+            iface = NetworkInterface::default_interface(); // Use default interface otherwise
+        }
+    }
 
     void scan_port_5353(std::set<uint16_t>& open_ports) {
         uint16_t port = 5353;
