@@ -4,25 +4,27 @@
 
 using namespace Tins;
 
-XMASScanner::XMASScanner(const IPv4Address& ip, uint16_t total_ports) : Scanner(ip, total_ports) {}
+XmasScanner::XmasScanner(const IPv4Address& ip, uint16_t total_ports) : Scanner(ip, total_ports) {}
 
-PortStatus XMASScanner::scan_port(uint16_t port) {
+PortStatus XmasScanner::scan_port(uint16_t port) {
     try {
         IP ip = IP(target_ip, iface.addresses().ip_addr) / TCP(port, 12345);
         TCP& tcp = ip.rfind_pdu<TCP>();
+        // Set FIN, PSH, and URG flags for Xmas scan
         tcp.set_flag(TCP::FIN, 1);
         tcp.set_flag(TCP::PSH, 1);
         tcp.set_flag(TCP::URG, 1);
 
         SnifferConfiguration config;
-        config.set_timeout(2);
+        config.set_timeout(2); // Set a moderate timeout
         config.set_promisc_mode(true);
         config.set_filter("tcp and src host " + target_ip.to_string() + " and dst port 12345");
         Sniffer sniffer(iface.name(), config);
 
         sender.send(ip);
 
-        PortStatus status = PortStatus::Filtered;
+        // Default to Open (which in Xmas scan context means Open or Filtered)
+        PortStatus status = PortStatus::Open;
 
         sniffer.sniff_loop([&](PDU& pdu) {
             if (should_stop) return false;
@@ -44,13 +46,14 @@ PortStatus XMASScanner::scan_port(uint16_t port) {
     }
 }
 
-void XMASScanner::scan_ports(uint16_t start_port, uint16_t end_port, std::set<uint16_t>& open_ports) {
+void XmasScanner::scan_ports(uint16_t start_port, uint16_t end_port, std::set<uint16_t>& open_ports) {
     for (uint16_t port = start_port; port <= end_port && !should_stop; ++port) {
         PortStatus status = scan_port(port);
         if (status == PortStatus::Open) {
             std::lock_guard<std::mutex> lock(mtx);
             if (open_ports.insert(port).second) {
-                std::cout << "Port " << port << " is open" << std::endl;
+                // Note: In Xmas scan, Open status means the port could be Open or Filtered
+                std::cout << "Port " << port << " is open or filtered" << std::endl;
             }
         }
         ++scanned_ports;
