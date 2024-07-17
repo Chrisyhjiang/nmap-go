@@ -2,6 +2,9 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <mutex>
+
+std::mutex cout_mutex; // Define the mutex here
 
 Scanner::Scanner(const IPv4Address& ip, uint16_t total_ports) : target_ip(ip), total_ports(total_ports) {
     try {
@@ -34,20 +37,26 @@ void Scanner::print_progress() {
     int bar_width = 70;
     while (scanned_ports < total_ports) {
         double progress = (double)scanned_ports / total_ports;
-        std::cout << "[";
-        int pos = bar_width * progress;
-        for (int i = 0; i < bar_width; ++i) {
-            if (i < pos) std::cout << "=";
-            else if (i == pos) std::cout << ">";
-            else std::cout << " ";
+        {
+            std::lock_guard<std::mutex> lock(cout_mutex); // Lock the mutex
+            std::cout << "[";
+            int pos = bar_width * progress;
+            for (int i = 0; i < bar_width; ++i) {
+                if (i < pos) std::cout << "=";
+                else if (i == pos) std::cout << ">";
+                else std::cout << " ";
+            }
+            std::cout << "] " << int(progress * 100.0) << " %\r";
+            std::cout.flush();
         }
-        std::cout << "] " << int(progress * 100.0) << " %\r";
-        std::cout.flush();
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    std::cout << "[";
-    for (int i = 0; i < bar_width; ++i) {
-        std::cout << "=";
+    {
+        std::lock_guard<std::mutex> lock(cout_mutex); // Lock the mutex
+        std::cout << "[";
+        for (int i = 0; i < bar_width; ++i) {
+            std::cout << "=";
+        }
+        std::cout << "] 100 %\n"; // Ensure the progress bar shows 100% completion
     }
-    std::cout << "] 100 %\n"; // Ensure the progress bar shows 100% completion
 }

@@ -1,7 +1,9 @@
 #include "output.h"
-#include "services.h"
 #include "tcp_connect_scanner.h"
 #include "syn_scanner.h"
+#include "udp_scanner.h"
+#include "xmas_scanner.h"
+#include "null_scanner.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -17,7 +19,7 @@ void start_progress_bar(Scanner& scanner) {
 int main(int argc, char* argv[]) {
     if (argc != 3) {
         cout << "Usage: " << argv[0] << " <ip_address> <scan_type>" << std::endl;
-        cout << "scan_type: tcp, syn" << std::endl;
+        cout << "scan_type: tcp, syn, udp, xmas, null" << std::endl;
         return 1;
     }
 
@@ -31,6 +33,12 @@ int main(int argc, char* argv[]) {
         scanner = new TCPConnectScanner(target, 65535);
     } else if (scan_type == "syn") {
         scanner = new SynScanner(target, 65535);
+    } else if (scan_type == "udp") {
+        scanner = new UDPScanner(target, 1000); // Adjust the number of ports if needed
+    } else if (scan_type == "xmas") {
+        scanner = new XmasScanner(target, 65535);
+    } else if (scan_type == "null") {
+        scanner = new NullScanner(target, 65535);
     } else {
         cout << "Unknown scan type: " << scan_type << std::endl;
         return 1;

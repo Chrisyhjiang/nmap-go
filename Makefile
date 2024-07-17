@@ -5,6 +5,8 @@ LDFLAGS = -L/opt/homebrew/Cellar/libtins/4.5/lib -ltins
 SRC_DIR = src
 OBJ_DIR = bin
 BIN_DIR = bin
+INCLUDE_DIR = include
+
 SRC_FILES = $(wildcard $(SRC_DIR)/*.cpp)
 OBJ_FILES = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
 TARGET = $(BIN_DIR)/my_nmap
