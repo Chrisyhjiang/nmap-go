@@ -16,7 +16,8 @@ using namespace Tins;
 enum class PortStatus {
     Open,
     Closed,
-    Filtered
+    Filtered, 
+    OPEN_OR_FILTERED
 };
 
 class Scanner {
