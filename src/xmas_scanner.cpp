@@ -50,7 +50,7 @@ PortStatus XmasScanner::scan_port(uint16_t port) {
         std::atomic<bool> stop_sniffer{false};
 
         // Start sniffing in a separate thread
-        std::thread sniffer_thread([&sniffer, &promise, &stop_sniffer, this, port]() {
+        std::thread sniffer_thread([&sniffer, &promise, &stop_sniffer, this]() {
             PortStatus status = PortStatus::OPEN_OR_FILTERED;
             try {
                 auto start_time = std::chrono::steady_clock::now();
