@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
     } else if (scan_type == "udp") {
         scanner = new UDPScanner(target, 65535);
     } else if (scan_type == "xmas") {
-        scanner = new XMASScanner(target, 65535);
+        scanner = new XmasScanner(target, 65535);
     } else if (scan_type == "null") {
         scanner = new NULLScanner(target, 65535);
     } else {
