@@ -8,6 +8,7 @@
 #include <mutex>
 
 class XmasScanner : public Scanner {
+class XmasScanner : public Scanner {
 public:
     XmasScanner(const Tins::IPv4Address& ip, uint16_t total_ports);
     PortStatus scan_port(uint16_t port) override;

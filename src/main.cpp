@@ -34,11 +34,11 @@ int main(int argc, char* argv[]) {
     } else if (scan_type == "syn") {
         scanner = new SynScanner(target, 65535);
     } else if (scan_type == "udp") {
-        scanner = new UDPScanner(target, 65535);
+        scanner = new UDPScanner(target, 1000); // Adjust the number of ports if needed
     } else if (scan_type == "xmas") {
         scanner = new XmasScanner(target, 65535);
     } else if (scan_type == "null") {
-        scanner = new NULLScanner(target, 65535);
+        scanner = new NullScanner(target, 65535);
     } else {
         cout << "Unknown scan type: " << scan_type << std::endl;
         return 1;

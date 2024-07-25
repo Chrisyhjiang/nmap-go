@@ -8,6 +8,8 @@
 #include <vector>
 #include <thread>
 #include <chrono>
+#include <condition_variable>
+#include <queue>
 
 using namespace Tins;
 
@@ -37,6 +39,10 @@ public:
     virtual void scan_ports(uint16_t start_port, uint16_t end_port, std::set<uint16_t>& open_ports) = 0; // Pure virtual function
     void stop();
     void print_progress();
+    uint16_t get_scanned_ports() const { return scanned_ports.load(); }
+    uint16_t get_total_ports() const { return total_ports; }
 };
+
+extern std::mutex cout_mutex; // Add this line
 
 #endif // SCANNER_H
