@@ -48,7 +48,13 @@ MyNmap is a custom-built port scanner written in C++. It implements various scan
    cd nmap-cpp
    ```
 
-2. **Build the project**
+2. **Install dependency package**
+   -- libtins: a high-level, multiplatform C++ network packet sniffing and crafting library. 
+      https://libtins.github.io/download/
+      macOS:   brew install libtins
+      linux:   sudo apt-get install libtins-dev
+
+3. **Build the project**
    ```sh
    make
    ```
@@ -59,6 +65,7 @@ Run the executable `my_nmap` with the target IP address and scan type:
 
 ```sh
 ./bin/my_nmap <ip_address> <scan_type>
+
 ```
 
 ## Additional Features
