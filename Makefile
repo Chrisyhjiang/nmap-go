@@ -9,13 +9,15 @@ BINARY_NAME=nmap-go
 BINARY_UNIX=$(BINARY_NAME)_unix
 
 # Main package path
-MAIN_PACKAGE=./cmd/scanner
+MAIN_PACKAGE=./cmd/nmap-go
 
 # Binary directory
 BIN_DIR=bin
 
-all: test build
+# Default target will run tidy, clean, and build
+all: tidy clean build
 
+# Build target depends on tidy and clean
 build:
 	mkdir -p $(BIN_DIR)
 	$(GOBUILD) -o $(BIN_DIR)/$(BINARY_NAME) -v $(MAIN_PACKAGE)
@@ -27,16 +29,13 @@ clean:
 	$(GOCLEAN)
 	rm -rf $(BIN_DIR)
 
-run: build
-	./$(BIN_DIR)/$(BINARY_NAME)
+tidy:
+	$(GOMOD) tidy
 
 deps:
 	$(GOGET) github.com/google/gopacket
 	$(GOGET) github.com/google/gopacket/pcap
 	$(GOGET) github.com/google/gopacket/layers
-
-tidy:
-	$(GOMOD) tidy
 
 # Cross compilation
 build-linux:
@@ -47,4 +46,4 @@ build-linux:
 run-sudo: build
 	sudo ./$(BIN_DIR)/$(BINARY_NAME)
 
-.PHONY: all build test clean run deps tidy build-linux run-sudo
+.PHONY: all build test clean run tidy deps build-linux run-sudo

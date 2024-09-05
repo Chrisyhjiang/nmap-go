@@ -1,19 +1,20 @@
 package scanner
 
 import (
-    "fmt"
-    "net"
-    "time"
+	"net"
 )
 
-type TcpConnectScanner struct{}
+// TCPScan performs a TCP connect scan and uses unified printing for open ports
+func TCPScan(ip string, iface *net.Interface) error {
+	var openPorts []int
 
-func (s *TcpConnectScanner) Scan(host string, port int) bool {
-    address := fmt.Sprintf("%s:%d", host, port)
-    conn, err := net.DialTimeout("tcp", address, time.Second)
-    if err != nil {
-        return false
-    }
-    defer conn.Close()
-    return true
+	// Revert to scanning the first 1000 ports
+	for port := 1; port <= 1000; port++ {
+		if IsPortOpen(ip, port) {
+			openPorts = append(openPorts, port)
+		}
+	}
+
+	PrintResults(openPorts, ip)
+	return nil
 }

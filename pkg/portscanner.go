@@ -1,54 +1,71 @@
 package pkg
 
-import (
-    "fmt"
-    "sync"
+// Portscanner.go can hold helper functions or shared utilities for your project.
 
-    "github.com/christopherjiang/nmap-go/internal/scanner"
-)
-
-type Scanner interface {
-    Scan(host string, port int) bool
-}
-
-type PortScanner struct {
-    host    string
-    scanner Scanner
-}
-
-func NewPortScanner(host string, scanType string, iface string) (*PortScanner, error) {
-    var s Scanner
-    var err error
-    switch scanType {
-    case "syn":
-        s, err = scanner.NewSynScanner(iface)
-        if err != nil {
-            return nil, err
-        }
-    case "tcp":
-        s = &scanner.TcpConnectScanner{}
-    case "udp":
-        s = &scanner.UdpScanner{}
-    default:
-        return nil, fmt.Errorf("Invalid scan type")
-    }
-    return &PortScanner{host: host, scanner: s}, nil
-}
-
-func (ps *PortScanner) ScanPort(port int) {
-    if ps.scanner.Scan(ps.host, port) {
-        fmt.Printf("Port %d is open\n", port)
-    }
-}
-
-func (ps *PortScanner) ScanRange(start, end int) {
-    var wg sync.WaitGroup
-    for port := start; port <= end; port++ {
-        wg.Add(1)
-        go func(p int) {
-            defer wg.Done()
-            ps.ScanPort(p)
-        }(port)
-    }
-    wg.Wait()
+var ImportantPorts = map[int]string{
+	0:	   "def closed",
+    20:    "FTP Data Transfer",
+    21:    "FTP Control",
+    22:    "SSH (Secure Shell)",
+    23:    "Telnet",
+    25:    "SMTP (Simple Mail Transfer Protocol)",
+    53:    "DNS (Domain Name System)",
+    67:    "DHCP (Dynamic Host Configuration Protocol) - Server",
+    68:    "DHCP (Dynamic Host Configuration Protocol) - Client",
+    69:    "TFTP (Trivial File Transfer Protocol)",
+    80:    "HTTP (Hypertext Transfer Protocol)",
+    110:   "POP3 (Post Office Protocol version 3)",
+    123:   "NTP (Network Time Protocol)",
+    143:   "IMAP (Internet Message Access Protocol)",
+    161:   "SNMP (Simple Network Management Protocol)",
+    162:   "SNMP Trap",
+    389:   "LDAP (Lightweight Directory Access Protocol)",
+    443:   "HTTPS (HTTP Secure)",
+    465:   "SMTPS (SMTP over SSL)",
+    500:   "ISAKMP (Internet Security Association and Key Management Protocol)",
+    587:   "SMTP (submission)",
+    631:   "IPP (Internet Printing Protocol)",
+    993:   "IMAPS (IMAP over SSL)",
+    995:   "POP3S (POP3 over SSL)",
+    1080:  "SOCKS Proxy",
+    1194:  "OpenVPN",
+    1433:  "Microsoft SQL Server",
+    1521:  "Oracle database default listener",
+    1720:  "H.323",
+    1723:  "PPTP (Point-to-Point Tunneling Protocol)",
+    2049:  "NFS (Network File System)",
+    3000:  "Common development port (e.g., React, Ruby on Rails)",
+    3306:  "MySQL database system",
+    3389:  "RDP (Remote Desktop Protocol)",
+    4443:  "Common alternative HTTPS port",
+    5000:  "UPnP (Universal Plug and Play)",
+    5222:  "XMPP (Extensible Messaging and Presence Protocol)",
+    5353:  "mDNS (Multicast DNS)",
+    5432:  "PostgreSQL database system",
+    5060:  "SIP (Session Initiation Protocol)",
+    5061:  "SIP over TLS",
+    5900:  "VNC (Virtual Network Computing)",
+    6379:  "Redis key-value database",
+    6660:  "IRC (Internet Relay Chat)",
+    6661:  "IRC (Internet Relay Chat)",
+    6662:  "IRC (Internet Relay Chat)",
+    6663:  "IRC (Internet Relay Chat)",
+    6664:  "IRC (Internet Relay Chat)",
+    6665:  "IRC (Internet Relay Chat)",
+    6666:  "IRC (Internet Relay Chat)",
+    6667:  "IRC (Internet Relay Chat)",
+    6668:  "IRC (Internet Relay Chat)",
+    6669:  "IRC (Internet Relay Chat)",
+    6881:  "BitTorrent",
+    8000:  "Common alternative HTTP port",
+    8080:  "HTTP alternate (http_alt)",
+    8443:  "HTTPS alternate",
+    8888:  "Common alternative HTTP port",
+    9000:  "SonarQube",
+    9090:  "Prometheus",
+    9200:  "Elasticsearch HTTP",
+    9300:  "Elasticsearch transport protocol",
+    27017: "MongoDB",
+    27018: "MongoDB",
+    27019: "MongoDB",
 }
