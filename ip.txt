@@ -1,6 +1,0 @@
-home=10.0.0.78
-office=192.168.12.125
-
-To find out your public IP address, you can use an online service through the command line. 
-curl ifconfig.me     // returun ipv6
-curl -4 ifconfig.me  // return ipv4 

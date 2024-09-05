@@ -1,28 +1,50 @@
-CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Iinclude -I/opt/homebrew/Cellar/libtins/4.5/include
-LDFLAGS = -L/opt/homebrew/Cellar/libtins/4.5/lib -ltins
+# Go parameters
+GOCMD=go
+GOBUILD=$(GOCMD) build
+GOCLEAN=$(GOCMD) clean
+GOTEST=$(GOCMD) test
+GOGET=$(GOCMD) get
+GOMOD=$(GOCMD) mod
+BINARY_NAME=nmap-go
+BINARY_UNIX=$(BINARY_NAME)_unix
 
-SRC_DIR = src
-OBJ_DIR = bin
-BIN_DIR = bin
-INCLUDE_DIR = include
+# Main package path
+MAIN_PACKAGE=./cmd/scanner
 
-SRC_FILES = $(wildcard $(SRC_DIR)/*.cpp)
-OBJ_FILES = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC_FILES))
-TARGET = $(BIN_DIR)/my_nmap
+# Binary directory
+BIN_DIR=bin
 
-all: $(TARGET)
+all: test build
 
-$(TARGET): $(OBJ_FILES)
-	@mkdir -p $(BIN_DIR)
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(OBJ_FILES) $(LDFLAGS)
+build:
+	mkdir -p $(BIN_DIR)
+	$(GOBUILD) -o $(BIN_DIR)/$(BINARY_NAME) -v $(MAIN_PACKAGE)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@mkdir -p $(OBJ_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+test:
+	$(GOTEST) -v ./...
 
 clean:
-	rm -f $(OBJ_DIR)/*.o $(TARGET)
+	$(GOCLEAN)
+	rm -rf $(BIN_DIR)
 
-# Phony targets
-.PHONY: all clean
+run: build
+	./$(BIN_DIR)/$(BINARY_NAME)
+
+deps:
+	$(GOGET) github.com/google/gopacket
+	$(GOGET) github.com/google/gopacket/pcap
+	$(GOGET) github.com/google/gopacket/layers
+
+tidy:
+	$(GOMOD) tidy
+
+# Cross compilation
+build-linux:
+	mkdir -p $(BIN_DIR)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BIN_DIR)/$(BINARY_UNIX) -v $(MAIN_PACKAGE)
+
+# Run with sudo (for SYN scans)
+run-sudo: build
+	sudo ./$(BIN_DIR)/$(BINARY_NAME)
+
+.PHONY: all build test clean run deps tidy build-linux run-sudo
