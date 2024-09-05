@@ -8,6 +8,7 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
+	"github.com/Chrisyhjiang/nmap-go/pkg" // Assuming ImportantPorts is defined in pkg/portscanner.go
 )
 
 // SYNScan performs a SYN scan using raw sockets and gopacket, and prints open ports
@@ -29,8 +30,8 @@ func SYNScan(ip string, iface *net.Interface) error {
 
 	var openPorts []int
 
-	// Scan the first 1000 ports
-	for port := 1; port <= 1000; port++ {
+	// Loop through ImportantPorts instead of scanning the first 1000 ports
+	for port := range pkg.ImportantPorts {
 		if sendSYN(handle, iface.HardwareAddr, dstIP, dstMAC, port) {
 			openPorts = append(openPorts, port)
 		}
