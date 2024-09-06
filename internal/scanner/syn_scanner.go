@@ -117,7 +117,7 @@ func captureSYNACK(handle *pcap.Handle, srcIP, dstIP net.IP, dstPort int) bool {
                 }
             }
         case <-timeout:
-            log.Printf("Timeout reached, no response for port %d", dstPort)
+            // log.Printf("Timeout reached, no response for port %d", dstPort)
             return false
         }
     }
