@@ -14,8 +14,8 @@ MAIN_PACKAGE=./cmd/nmap-go
 # Binary directory
 BIN_DIR=bin
 
-# Default target will run tidy, clean, and build
-all: tidy clean build
+# Default target will run deps, tidy, clean, and build
+all: deps tidy clean build
 
 # Build target depends on tidy and clean
 build:
@@ -32,10 +32,9 @@ clean:
 tidy:
 	$(GOMOD) tidy
 
+# Install required dependencies
 deps:
-	$(GOGET) github.com/google/gopacket
-	$(GOGET) github.com/google/gopacket/pcap
-	$(GOGET) github.com/google/gopacket/layers
+	$(GOGET) -d ./...
 
 # Cross compilation
 build-linux:

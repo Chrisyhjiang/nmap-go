@@ -1,7 +1,1 @@
-Scanning IP: 192.168.64.1 using interface: bridge100 with scan type: tcp
-Nmap scan report for 192.168.64.1
-Host is up.
-5000/tcp open
-53/tcp open
-5432/tcp open
-3306/tcp open
+Scanning IP: 174.92.30.117 using interface: en0 with scan type: syn

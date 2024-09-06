@@ -1,13 +1,12 @@
 package scanner
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"time"
 )
 
-// GetBestInterface identifies the best network interface to scan the target IP.
+// Modify the GetBestInterface function to avoid virtual interfaces like "bridge100"
 func GetBestInterface(targetIP string) (*net.Interface, error) {
 	parsedTargetIP := net.ParseIP(targetIP)
 	if parsedTargetIP == nil {
@@ -20,12 +19,14 @@ func GetBestInterface(targetIP string) (*net.Interface, error) {
 		return nil, fmt.Errorf("failed to get network interfaces: %v", err)
 	}
 
-	// Store a fallback interface in case no matching subnet is found
-	var fallbackIface *net.Interface
-
 	// Iterate over each network interface
 	for _, iface := range interfaces {
-		if iface.Flags&net.FlagUp == 0 { // Skip interfaces that are down
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 { // Skip interfaces that are down or loopback
+			continue
+		}
+
+		// Exclude virtual interfaces like bridge100
+		if iface.Name == "bridge100" || iface.Name == "vboxnet" || iface.Name == "docker0" {
 			continue
 		}
 
@@ -40,25 +41,14 @@ func GetBestInterface(targetIP string) (*net.Interface, error) {
 				continue
 			}
 
-			// If the target IP is in the same subnet as one of the interface addresses, return this interface
-			if ipNet.Contains(parsedTargetIP) {
-				return &iface, nil
-			}
-
-			// Store the first valid interface as a fallback
-			if fallbackIface == nil {
-				fallbackIface = &iface
-			}
+			// Return this interface if it has a valid IPv4 address
+			return &iface, nil
 		}
 	}
 
-	// If no matching subnet was found, return the first valid interface as a fallback
-	if fallbackIface != nil {
-		return fallbackIface, nil
-	}
-
-	return nil, errors.New("no suitable network interface found")
+	return nil, fmt.Errorf("no suitable network interface found")
 }
+
 
 // IsPortOpen checks if a TCP port is open using a simple connect scan
 func IsPortOpen(ip string, port int) bool {
