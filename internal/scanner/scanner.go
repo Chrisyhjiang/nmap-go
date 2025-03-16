@@ -63,15 +63,15 @@ func IsPortOpen(ip string, port int) bool {
 
 // PrintResults handles unified output for open ports
 func PrintResults(openPorts []int, ip string) {
-	fmt.Printf("Nmap scan report for %s\n", ip)
-	fmt.Println("Host is up.")
+	fmt.Printf("\nScan results for %s:\n", ip)
+	
 	if len(openPorts) == 0 {
 		fmt.Println("No open ports found.")
 		return
 	}
 
+	fmt.Printf("Found %d open ports:\n", len(openPorts))
 	for _, port := range openPorts {
-		// Print open ports in the format "PORT/tcp open service"
 		fmt.Printf("%d/tcp open\n", port)
 	}
 }
